@@ -9,8 +9,8 @@
       {
         "id": "lobster_red",
         "name": "Lobster Red",
-        "workspace": "./openclaw/workspaces/red",
-        "agentDir": "./openclaw/agents/lobster_red",
+        "workspace": "/root/.openclaw/workspaces/red",
+        "agentDir": "/root/.openclaw/agents/lobster_red",
         "model": {
           "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
         },
@@ -30,8 +30,8 @@
       {
         "id": "lobster_yellow",
         "name": "Lobster Yellow",
-        "workspace": "./openclaw/workspaces/yellow",
-        "agentDir": "./openclaw/agents/lobster_yellow",
+        "workspace": "/root/.openclaw/workspaces/yellow",
+        "agentDir": "/root/.openclaw/agents/lobster_yellow",
         "model": {
           "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
         },
@@ -51,8 +51,8 @@
       {
         "id": "lobster_green",
         "name": "Lobster Green",
-        "workspace": "./openclaw/workspaces/green",
-        "agentDir": "./openclaw/agents/lobster_green",
+        "workspace": "/root/.openclaw/workspaces/green",
+        "agentDir": "/root/.openclaw/agents/lobster_green",
         "model": {
           "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
         },
@@ -103,6 +103,6 @@
 
   "env": {
     "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
-    "BACKEND_URL": "${BACKEND_URL:-http://localhost:8000}"
+    "BACKEND_URL": "http://127.0.0.1:8000"
   }
 }

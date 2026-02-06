@@ -1,12 +1,11 @@
 ---
 name: lobster-yellow-tools
 description: HTTP tools for Lobster Yellow to fetch prices and charge credits via the backend API.
-metadata: {"openclaw": {"requires": {"env": ["BACKEND_URL"]}}}
 ---
 
 # Lobster Yellow Tools
 
-You have two tools: fetching price data and charging users for analysis.
+You have two tools. The backend runs at http://127.0.0.1:8000.
 
 ## fetch_price
 
@@ -17,7 +16,7 @@ Fetches the current USD price of a cryptocurrency (same endpoint Red uses).
 **How:**
 
 ```bash
-curl "${BACKEND_URL}/data/price?symbol=<SYMBOL>"
+curl "http://127.0.0.1:8000/data/price?symbol=<SYMBOL>"
 ```
 
 **Example response:**
@@ -40,7 +39,7 @@ Transfers credits from one account to another via the ledger.
 **How:**
 
 ```bash
-curl -X POST "${BACKEND_URL}/ledger/transfer" \
+curl -X POST "http://127.0.0.1:8000/ledger/transfer" \
   -H "Content-Type: application/json" \
   -d '{"from_id": "<FROM>", "to_id": "<TO>", "amount": <AMOUNT>, "memo": "<MEMO>"}'
 ```

@@ -1,8 +1,13 @@
 # Lobster Credit Playground
 
-A minimal demo of a **three-agent AI credit economy**.
+A minimal demo of a **three-agent AI credit economy**, deployed as a single container on Render.
 
-Three AI agents ("lobsters") live in a Telegram group, share a credit ledger, charge each other for services, and can settle balances on Solana devnet.
+Inside the container, **OpenClaw** and **FastAPI** both run:
+
+- **OpenClaw** handles Telegram bots, LLM calls (via OpenRouter), and agent logic.
+- **FastAPI** is a pure HTTP tool backend (ledger, price data, settlement).
+
+OpenClaw agents call FastAPI tools at `http://127.0.0.1:8000` (localhost inside the container).
 
 | Agent | Role | What it does |
 |-------|------|-------------|
@@ -22,22 +27,20 @@ Three AI agents ("lobsters") live in a Telegram group, share a credit ledger, ch
           |              |              |
       Red Bot      Yellow Bot      Green Bot
           |              |              |
-          +--------------+--------------+
-                         |
-                  OpenClaw Gateway          <-- runs separately
-                  (agents + LLM via OpenRouter)
-                         |
-                    HTTP calls              <-- skills use web_fetch / curl
-                         |
-                  FastAPI Backend           <-- this repo, deployed on Render/etc.
-                  |       |       |
-              /data/*  /ledger/*  /settle
-              (CoinGecko) (SQLite)  (Solana devnet)
+  ========|==============|==============|========  single Render container
+  |       +--------------+--------------+       |
+  |                      |                      |
+  |               OpenClaw Gateway              |
+  |         (agents + LLM via OpenRouter)       |
+  |                      |                      |
+  |              http://127.0.0.1:8000          |
+  |                      |                      |
+  |               FastAPI Backend               |
+  |            |       |       |                |
+  |        /data/*  /ledger/*  /settle          |
+  |       (CoinGecko) (SQLite) (Solana devnet)  |
+  ==============================================
 ```
-
-**Key separation:**
-- **FastAPI** = pure HTTP tool backend. No Telegram, no LLM calls.
-- **OpenClaw** = owns all agent logic, Telegram integration, and LLM (via OpenRouter). Runs as a separate process.
 
 ### Credit Flow
 
@@ -53,118 +56,38 @@ Three AI agents ("lobsters") live in a Telegram group, share a credit ledger, ch
 
 ---
 
-## Setup
+## Deploy on Render
 
-### Prerequisites
+### 1. Create a Web Service
 
-- Python 3.11+
-- Node.js 22+ (for OpenClaw)
-- Three Telegram bot tokens (from [@BotFather](https://t.me/BotFather))
-- An [OpenRouter](https://openrouter.ai/) API key
+- Connect your GitHub repo.
+- **Environment**: Docker.
+- **Branch**: `main` (or your deploy branch).
+- **Health check path**: `/health`
 
-### 1. Clone and install
+### 2. Set environment variables in Render dashboard
 
-```bash
-git clone https://github.com/vivekpal1/lobster-credit-playground.git
-cd lobster-credit-playground
+| Variable | Value |
+|----------|-------|
+| `OPENROUTER_API_KEY` | Your OpenRouter API key |
+| `OPENROUTER_MODEL` | `meta-llama/llama-3.1-8b-instruct:free` (or any model) |
+| `TELEGRAM_BOT_TOKEN_RED` | Token from @BotFather for Red bot |
+| `TELEGRAM_BOT_TOKEN_YELLOW` | Token from @BotFather for Yellow bot |
+| `TELEGRAM_BOT_TOKEN_GREEN` | Token from @BotFather for Green bot |
 
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+Optional:
 
-### 2. Configure environment
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SOLANA_RPC_URL` | `https://api.devnet.solana.com` | For /settle |
+| `SOLANA_SETTLEMENT_PRIVATE_KEY` | - | Keypair for settlement |
+| `LEDGER_DB_PATH` | `/app/data/ledger.db` | SQLite path |
 
-```bash
-cp .env.example .env
-# Edit .env with your actual values
-```
+### 3. Deploy
 
-### 3. Start the FastAPI backend
+Render builds the Docker image and starts both OpenClaw + FastAPI via `entrypoint.sh`.
 
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-The API auto-creates the SQLite database and seeds agent accounts on first start.
-
-### 4. Verify the backend works
-
-```bash
-# Health check
-curl http://localhost:8000/health
-# -> {"status":"ok"}
-
-# Price endpoint
-curl "http://localhost:8000/data/price?symbol=btc"
-# -> {"symbol":"BTC","price_usd":65634.0,"timestamp":"2026-02-06T..."}
-
-# Issue starter credits
-curl -X POST http://localhost:8000/ledger/issue_credit \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test123", "amount": 50}'
-# -> {"ok":true,"message":"Transfer complete.","tx_id":1}
-
-# Check balance
-curl "http://localhost:8000/ledger/balance?user_id=test123"
-# -> {"id":"test123","balance":50,"credit_limit":10,"reputation":500}
-
-# Transfer credits
-curl -X POST http://localhost:8000/ledger/transfer \
-  -H "Content-Type: application/json" \
-  -d '{"from_id":"test123","to_id":"lobster_yellow","amount":2,"memo":"test"}'
-# -> {"ok":true,"message":"Transfer complete.","tx_id":2}
-
-# Agent stats
-curl http://localhost:8000/ledger/agent_stats
-# -> [{"id":"lobster_red","balance":100,...}, ...]
-```
-
-### 5. Install and configure OpenClaw
-
-```bash
-npm install -g openclaw
-openclaw setup
-```
-
-During setup, select **OpenRouter** as the model provider and enter your API key.
-
-Then copy the config and skill/soul files:
-
-```bash
-# Copy the config
-cp openclaw/openclaw.config.json ~/.openclaw/openclaw.json
-
-# Create workspace directories for each agent
-mkdir -p ~/.openclaw/workspaces/{red,yellow,green}/skills
-
-# Copy skills into each agent's workspace
-cp openclaw/skills/lobster_red_skills.md    ~/.openclaw/workspaces/red/skills/SKILL.md
-cp openclaw/skills/lobster_yellow_skills.md ~/.openclaw/workspaces/yellow/skills/SKILL.md
-cp openclaw/skills/lobster_green_skills.md  ~/.openclaw/workspaces/green/skills/SKILL.md
-
-# Copy soul files into agent directories
-mkdir -p ~/.openclaw/agents/{lobster_red,lobster_yellow,lobster_green}
-cp openclaw/souls/lobster_red_soul.md    ~/.openclaw/agents/lobster_red/SOUL.md
-cp openclaw/souls/lobster_yellow_soul.md ~/.openclaw/agents/lobster_yellow/SOUL.md
-cp openclaw/souls/lobster_green_soul.md  ~/.openclaw/agents/lobster_green/SOUL.md
-```
-
-Edit `~/.openclaw/openclaw.json` and replace `${...}` placeholders with your actual values, or export them as environment variables.
-
-### 6. Start OpenClaw
-
-```bash
-export TELEGRAM_BOT_TOKEN_RED="7986130620:AAE..."
-export TELEGRAM_BOT_TOKEN_YELLOW="7691960881:AAH..."
-export TELEGRAM_BOT_TOKEN_GREEN="8280137496:AAE..."
-export OPENROUTER_API_KEY="sk-or-v1-..."
-export BACKEND_URL="http://localhost:8000"  # or your Render URL
-
-openclaw start --config ./openclaw/openclaw.config.json
-```
-
-### 7. Set up Telegram
+### 4. Set up Telegram
 
 1. Create a Telegram group (e.g. "Lobster Economy").
 2. Add all three bots to the group.
@@ -175,7 +98,7 @@ openclaw start --config ./openclaw/openclaw.config.json
 
 ## Telegram Commands
 
-In the group, address each agent by name:
+Address each agent by name in the group:
 
 | Command | Agent | What happens |
 |---------|-------|-------------|
@@ -189,98 +112,82 @@ In the group, address each agent by name:
 
 ---
 
-## API Reference
+## What Runs Where
 
-All endpoints are on the FastAPI backend. OpenClaw agents call these via HTTP.
+| Component | Process | Responsibility |
+|-----------|---------|---------------|
+| **OpenClaw Gateway** | Background process | Telegram bots, LLM (OpenRouter), agent personas, tool routing |
+| **FastAPI** | Foreground process | HTTP endpoints: ledger, prices, health, settlement |
+
+OpenClaw calls FastAPI at `http://127.0.0.1:8000` (localhost, same container).
+
+FastAPI has **no** Telegram code and **no** LLM code. It's a pure tool backend.
+
+---
+
+## API Reference
 
 ### Data
 
-| Method | Path | Description | Example |
-|--------|------|-------------|---------|
-| GET | `/data/price?symbol=btc` | BTC or ETH price | `{"symbol":"BTC","price_usd":97432.10,"timestamp":"..."}` |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/data/price?symbol=btc` | BTC or ETH price from CoinGecko |
 
 ### Ledger
 
-| Method | Path | Body | Description |
-|--------|------|------|-------------|
-| POST | `/ledger/account` | `{"id":"...","initial_balance":0,"credit_limit":10,"reputation":500}` | Create account |
-| GET | `/ledger/balance?user_id=...` | - | Get balance |
-| POST | `/ledger/transfer` | `{"from_id":"...","to_id":"...","amount":2,"memo":"..."}` | Transfer credits |
-| POST | `/ledger/issue_credit` | `{"user_id":"...","amount":50}` | Issue credits from Green |
-| GET | `/ledger/agent_stats` | - | Stats for all 3 agents |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/ledger/account` | Create account |
+| GET | `/ledger/balance?user_id=...` | Get balance |
+| POST | `/ledger/transfer` | Transfer credits |
+| POST | `/ledger/issue_credit` | Issue credits from Green |
+| GET | `/ledger/agent_stats` | Stats for all 3 agents |
 
 ### System
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check (use for Render) |
 | POST | `/settle` | Solana devnet settlement demo |
 
 ---
 
 ## Environment Variables
 
-### FastAPI backend (set in `.env` or cloud dashboard)
+All set via the Render dashboard (or `.env` for local dev).
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `LEDGER_DB_PATH` | No | `./ledger.db` | Path to SQLite database |
-| `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC endpoint |
-| `SOLANA_SETTLEMENT_PRIVATE_KEY` | No | - | Keypair for /settle |
-| `PORT` | No | `8000` | Server port |
-
-### OpenClaw (export before running `openclaw start`)
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
-| `OPENROUTER_MODEL` | No | LLM model (default: `meta-llama/llama-3.1-8b-instruct:free`) |
-| `TELEGRAM_BOT_TOKEN_RED` | Yes | Telegram token for Red bot |
-| `TELEGRAM_BOT_TOKEN_YELLOW` | Yes | Telegram token for Yellow bot |
-| `TELEGRAM_BOT_TOKEN_GREEN` | Yes | Telegram token for Green bot |
-| `BACKEND_URL` | Yes | URL of FastAPI backend (e.g. `http://localhost:8000`) |
+| Variable | Required | Default | Used By |
+|----------|----------|---------|---------|
+| `OPENROUTER_API_KEY` | Yes | - | OpenClaw |
+| `OPENROUTER_MODEL` | No | `meta-llama/llama-3.1-8b-instruct:free` | OpenClaw |
+| `TELEGRAM_BOT_TOKEN_RED` | Yes | - | OpenClaw |
+| `TELEGRAM_BOT_TOKEN_YELLOW` | Yes | - | OpenClaw |
+| `TELEGRAM_BOT_TOKEN_GREEN` | Yes | - | OpenClaw |
+| `LEDGER_DB_PATH` | No | `/app/data/ledger.db` | FastAPI |
+| `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | FastAPI |
+| `SOLANA_SETTLEMENT_PRIVATE_KEY` | No | - | FastAPI |
+| `PORT` | No | `8000` | FastAPI (Render sets this) |
 
 ---
 
-## Solana Settlement Demo
-
-The `/settle` endpoint sends a real transaction on Solana devnet as proof that off-chain balances can be bridged on-chain.
-
-### Setup
-
-1. Install Solana CLI: https://docs.solanalabs.com/cli/install
-2. Generate a devnet keypair:
-   ```bash
-   solana-keygen new --outfile ~/.config/solana/devnet-treasury.json
-   solana config set --url devnet
-   ```
-3. Fund it:
-   ```bash
-   solana airdrop 2 --keypair ~/.config/solana/devnet-treasury.json
-   ```
-4. Set in `.env`:
-   ```
-   SOLANA_SETTLEMENT_PRIVATE_KEY=[1,2,3,...,64 bytes from keypair file]
-   ```
-
-### Trigger
+## Local Development
 
 ```bash
-curl -X POST http://localhost:8000/settle
+# Install Python deps
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Start FastAPI
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# In another terminal, install and start OpenClaw
+npm install -g openclaw
+export TELEGRAM_BOT_TOKEN_RED="..."
+export TELEGRAM_BOT_TOKEN_YELLOW="..."
+export TELEGRAM_BOT_TOKEN_GREEN="..."
+export OPENROUTER_API_KEY="..."
+openclaw gateway --port 18789 --verbose
 ```
-
-Returns a transaction signature and Solana Explorer link.
-
----
-
-## Docker
-
-```bash
-docker build -t lobster-credit-playground .
-docker run -p 8000:8000 --env-file .env lobster-credit-playground
-```
-
-This runs only the FastAPI backend. OpenClaw runs separately.
 
 ---
 
@@ -289,26 +196,27 @@ This runs only the FastAPI backend. OpenClaw runs separately.
 ```
 lobster-credit-playground/
   README.md
-  Dockerfile
+  Dockerfile              # Installs Node.js + OpenClaw + Python + FastAPI
+  entrypoint.sh           # Starts OpenClaw (background) + FastAPI (foreground)
   requirements.txt
   .env.example
 
-  app/
-    main.py              # FastAPI entrypoint
-    config.py            # env vars (only what FastAPI needs)
-    db.py                # SQLite schema + seeding
-    ledger.py            # credit ledger logic
-    models.py            # Pydantic models
+  app/                    # FastAPI — pure HTTP tool backend
+    main.py
+    config.py
+    db.py
+    ledger.py
+    models.py
     routers/
-      ledger_routes.py   # /ledger/* endpoints
-      data_routes.py     # /data/* endpoints
-      system_routes.py   # /health, /settle
+      ledger_routes.py
+      data_routes.py
+      system_routes.py
     services/
-      price_provider.py  # CoinGecko wrapper
+      price_provider.py
       solana_settlement.py
 
-  openclaw/
-    openclaw.config.json # 3-agent config for OpenClaw
+  openclaw/               # OpenClaw config + agent definitions
+    openclaw.config.json  # 3 agents, 3 Telegram bots, OpenRouter model
     souls/
       lobster_red_soul.md
       lobster_yellow_soul.md
@@ -319,7 +227,15 @@ lobster-credit-playground/
       lobster_green_skills.md
 ```
 
-No Telegram bot code in FastAPI. No LLM calls in FastAPI. OpenClaw handles all of that.
+---
+
+## Solana Settlement Demo
+
+```bash
+curl -X POST https://your-app.onrender.com/settle
+```
+
+Returns a transaction signature and Solana Explorer link. See the previous README section for devnet wallet setup.
 
 ---
 
