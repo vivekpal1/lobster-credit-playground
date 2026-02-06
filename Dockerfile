@@ -6,6 +6,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install git (required by openclaw's npm dependencies)
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy Node.js from the node image (no external repos needed)
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
