@@ -52,8 +52,6 @@ RUN cp openclaw/skills/lobster_red_skills.md    /root/.openclaw/workspaces/red/s
 RUN cp openclaw/openclaw.config.json /root/.openclaw/openclaw.json
 
 ENV LEDGER_DB_PATH=/app/data/ledger.db
-# Give Node.js enough heap room on Render free tier (512MB total)
-ENV NODE_OPTIONS="--max-old-space-size=384"
 
 EXPOSE 8000
 

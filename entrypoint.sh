@@ -1,8 +1,6 @@
 #!/bin/sh
 set -e
 
-export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=384}"
-
 # --- Start OpenClaw gateway in the background ------------------------------
 # Non-interactive onboard (skip wizard, skip daemon — we run gateway directly)
 openclaw onboard --non-interactive \
