@@ -1,15 +1,10 @@
-# Core
+# Core — FastAPI tool backend only
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.34,<1.0
 httpx>=0.28,<1.0
 pydantic>=2.10,<3.0
 python-dotenv>=1.0,<2.0
 
-# Telegram bots + LLM
-python-telegram-bot>=22.0,<23.0
-openai>=1.50,<3.0
-
-# Solana settlement (optional — the API runs fine without these;
-# only needed if you want /settle to send real devnet transactions)
+# Solana settlement (optional — /settle works as a mock without these)
 solders>=0.25,<1.0
 solana>=0.36,<1.0

@@ -17,14 +17,14 @@
         "identity": {
           "name": "Lobster Red",
           "theme": "laid-back data lobster",
-          "emoji": "🦞"
+          "emoji": "🔴"
         },
         "groupChat": {
           "mentionPatterns": ["Red:", "red:", "@lobster_red_bot", "Red,", "red,"]
         },
         "tools": {
           "profile": "messaging",
-          "deny": ["browser", "exec", "write", "edit"]
+          "deny": ["browser", "exec", "write", "edit", "canvas", "nodes", "cron"]
         }
       },
       {
@@ -37,15 +37,15 @@
         },
         "identity": {
           "name": "Lobster Yellow",
-          "theme": "analytical data lobster",
-          "emoji": "🦞"
+          "theme": "analytical lobster",
+          "emoji": "🟡"
         },
         "groupChat": {
           "mentionPatterns": ["Yellow:", "yellow:", "@lobster_yellow_bot", "Yellow,", "yellow,"]
         },
         "tools": {
           "profile": "messaging",
-          "deny": ["browser", "exec", "write", "edit"]
+          "deny": ["browser", "exec", "write", "edit", "canvas", "nodes", "cron"]
         }
       },
       {
@@ -58,25 +58,19 @@
         },
         "identity": {
           "name": "Lobster Green",
-          "theme": "bank and credit lobster",
-          "emoji": "🦞"
+          "theme": "bank lobster",
+          "emoji": "🟢"
         },
         "groupChat": {
           "mentionPatterns": ["Green:", "green:", "@lobster_green_bot", "Green,", "green,"]
         },
         "tools": {
           "profile": "messaging",
-          "deny": ["browser", "exec", "write", "edit"]
+          "deny": ["browser", "exec", "write", "edit", "canvas", "nodes", "cron"]
         }
       }
     ]
   },
-
-  "bindings": [
-    { "agentId": "lobster_red",    "match": { "channel": "telegram", "accountId": "red" } },
-    { "agentId": "lobster_yellow", "match": { "channel": "telegram", "accountId": "yellow" } },
-    { "agentId": "lobster_green",  "match": { "channel": "telegram", "accountId": "green" } }
-  ],
 
   "channels": {
     "telegram": {
@@ -95,18 +89,20 @@
           "botToken": "${TELEGRAM_BOT_TOKEN_GREEN}"
         }
       },
-      "dmPolicy": "open",
       "groups": {
         "*": {
-          "requireMention": true,
-          "groupPolicy": "open"
+          "requireMention": true
         }
       }
     }
   },
 
+  "session": {
+    "scope": "per-sender"
+  },
+
   "env": {
     "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
-    "LEDGER_API_BASE": "${LEDGER_API_BASE:-http://localhost:8000}"
+    "BACKEND_URL": "${BACKEND_URL:-http://localhost:8000}"
   }
 }
