@@ -1,0 +1,112 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
+      }
+    },
+    "list": [
+      {
+        "id": "lobster_red",
+        "name": "Lobster Red",
+        "workspace": "./openclaw/workspaces/red",
+        "agentDir": "./openclaw/agents/lobster_red",
+        "model": {
+          "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
+        },
+        "identity": {
+          "name": "Lobster Red",
+          "theme": "laid-back data lobster",
+          "emoji": "🦞"
+        },
+        "groupChat": {
+          "mentionPatterns": ["Red:", "red:", "@lobster_red_bot", "Red,", "red,"]
+        },
+        "tools": {
+          "profile": "messaging",
+          "deny": ["browser", "exec", "write", "edit"]
+        }
+      },
+      {
+        "id": "lobster_yellow",
+        "name": "Lobster Yellow",
+        "workspace": "./openclaw/workspaces/yellow",
+        "agentDir": "./openclaw/agents/lobster_yellow",
+        "model": {
+          "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
+        },
+        "identity": {
+          "name": "Lobster Yellow",
+          "theme": "analytical data lobster",
+          "emoji": "🦞"
+        },
+        "groupChat": {
+          "mentionPatterns": ["Yellow:", "yellow:", "@lobster_yellow_bot", "Yellow,", "yellow,"]
+        },
+        "tools": {
+          "profile": "messaging",
+          "deny": ["browser", "exec", "write", "edit"]
+        }
+      },
+      {
+        "id": "lobster_green",
+        "name": "Lobster Green",
+        "workspace": "./openclaw/workspaces/green",
+        "agentDir": "./openclaw/agents/lobster_green",
+        "model": {
+          "primary": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
+        },
+        "identity": {
+          "name": "Lobster Green",
+          "theme": "bank and credit lobster",
+          "emoji": "🦞"
+        },
+        "groupChat": {
+          "mentionPatterns": ["Green:", "green:", "@lobster_green_bot", "Green,", "green,"]
+        },
+        "tools": {
+          "profile": "messaging",
+          "deny": ["browser", "exec", "write", "edit"]
+        }
+      }
+    ]
+  },
+
+  "bindings": [
+    { "agentId": "lobster_red",    "match": { "channel": "telegram", "accountId": "red" } },
+    { "agentId": "lobster_yellow", "match": { "channel": "telegram", "accountId": "yellow" } },
+    { "agentId": "lobster_green",  "match": { "channel": "telegram", "accountId": "green" } }
+  ],
+
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "accounts": {
+        "red": {
+          "name": "Lobster Red",
+          "botToken": "${TELEGRAM_BOT_TOKEN_RED}"
+        },
+        "yellow": {
+          "name": "Lobster Yellow",
+          "botToken": "${TELEGRAM_BOT_TOKEN_YELLOW}"
+        },
+        "green": {
+          "name": "Lobster Green",
+          "botToken": "${TELEGRAM_BOT_TOKEN_GREEN}"
+        }
+      },
+      "dmPolicy": "open",
+      "groups": {
+        "*": {
+          "requireMention": true,
+          "groupPolicy": "open"
+        }
+      }
+    }
+  },
+
+  "env": {
+    "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+    "LEDGER_API_BASE": "${LEDGER_API_BASE:-http://localhost:8000}"
+  }
+}
