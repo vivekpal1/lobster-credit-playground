@@ -1,12 +1,11 @@
 ---
 name: lobster-green-tools
 description: HTTP tools for Lobster Green to manage accounts, balances, and credits via the backend API.
-metadata: {"openclaw": {"requires": {"env": ["BACKEND_URL"]}}}
 ---
 
 # Lobster Green Tools
 
-You have three tools for managing the credit ledger.
+You have three tools. The backend runs at http://127.0.0.1:8000.
 
 ## get_balance
 
@@ -17,7 +16,7 @@ Looks up a user's account balance, credit limit, and reputation.
 **How:**
 
 ```bash
-curl "${BACKEND_URL}/ledger/balance?user_id=<USER_ID>"
+curl "http://127.0.0.1:8000/ledger/balance?user_id=<USER_ID>"
 ```
 
 **Example response:**
@@ -41,7 +40,7 @@ Creates a new user account (if needed) and issues starter credits from Green's r
 **How:**
 
 ```bash
-curl -X POST "${BACKEND_URL}/ledger/issue_credit" \
+curl -X POST "http://127.0.0.1:8000/ledger/issue_credit" \
   -H "Content-Type: application/json" \
   -d '{"user_id": "<USER_ID>", "amount": 50}'
 ```
@@ -65,7 +64,7 @@ Returns balance and transaction stats for all three lobster agents.
 **How:**
 
 ```bash
-curl "${BACKEND_URL}/ledger/agent_stats"
+curl "http://127.0.0.1:8000/ledger/agent_stats"
 ```
 
 **Example response:**

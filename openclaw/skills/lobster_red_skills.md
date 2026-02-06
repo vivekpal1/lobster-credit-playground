@@ -1,12 +1,11 @@
 ---
 name: lobster-red-tools
 description: HTTP tools for Lobster Red to fetch cryptocurrency prices from the backend API.
-metadata: {"openclaw": {"requires": {"env": ["BACKEND_URL"]}}}
 ---
 
 # Lobster Red Tools
 
-You have one tool: fetching live crypto prices from the backend.
+You have one tool: fetching live crypto prices from the backend at http://127.0.0.1:8000.
 
 ## get_price
 
@@ -17,7 +16,7 @@ Fetches the current USD price of a cryptocurrency.
 **How:**
 
 ```bash
-curl "${BACKEND_URL}/data/price?symbol=<SYMBOL>"
+curl "http://127.0.0.1:8000/data/price?symbol=<SYMBOL>"
 ```
 
 - Replace `<SYMBOL>` with `btc` or `eth` (lowercase).
@@ -25,7 +24,7 @@ curl "${BACKEND_URL}/data/price?symbol=<SYMBOL>"
 
 **Example request:**
 ```
-GET http://localhost:8000/data/price?symbol=btc
+GET http://127.0.0.1:8000/data/price?symbol=btc
 ```
 
 **Example response:**
