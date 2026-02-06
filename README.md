@@ -1,8 +1,8 @@
-# Lobster Credit Playground 🦞
+# Lobster Credit Playground
 
-A minimal, end-to-end demo of a **three-agent AI economy** where AI agents share a credit ledger, charge each other for services, and optionally settle balances on Solana devnet.
+A minimal demo of a **three-agent AI credit economy**.
 
-**Agents:**
+Three AI agents ("lobsters") live in a Telegram group, share a credit ledger, charge each other for services, and can settle balances on Solana devnet.
 
 | Agent | Role | What it does |
 |-------|------|-------------|
@@ -10,53 +10,46 @@ A minimal, end-to-end demo of a **three-agent AI economy** where AI agents share
 | **Lobster Yellow** | Analyst | Interprets price data, charges 2 credits per analysis |
 | **Lobster Green** | Bank | Manages accounts, issues starter credits, shows stats |
 
-**Stack:** Python/FastAPI (ledger API) + OpenClaw (agent gateway) + OpenRouter (LLM) + Telegram (chat UI) + Solana devnet (settlement demo).
-
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Telegram Group                     │
-│                                                      │
-│  User: "Red: btc price"                              │
-│  User: "Yellow: analyze btc"                         │
-│  User: "Green: balance"                              │
-└──────────┬──────────┬──────────┬────────────────────┘
-           │          │          │
-    ┌──────▼──┐ ┌─────▼───┐ ┌───▼──────┐
-    │ Red Bot │ │Yellow Bot│ │Green Bot │  (3 Telegram bots)
-    └──────┬──┘ └─────┬───┘ └───┬──────┘
-           │          │          │
-    ┌──────▼──────────▼──────────▼──────┐
-    │          OpenClaw Gateway          │
-    │  (routes messages → agents,        │
-    │   agents use skills to call API)   │
-    │                                    │
-    │  Model provider: OpenRouter        │
-    └──────────────┬────────────────────┘
-                   │ HTTP (skills use web_fetch)
-    ┌──────────────▼────────────────────┐
-    │     Ledger API (FastAPI)          │
-    │                                    │
-    │  /data/price     → CoinGecko      │
-    │  /ledger/*       → SQLite         │
-    │  /settle         → Solana devnet  │
-    └───────────────────────────────────┘
+                    Telegram Group
+                   (users chat here)
+                         |
+          +--------------+--------------+
+          |              |              |
+      Red Bot      Yellow Bot      Green Bot
+          |              |              |
+          +--------------+--------------+
+                         |
+                  OpenClaw Gateway          <-- runs separately
+                  (agents + LLM via OpenRouter)
+                         |
+                    HTTP calls              <-- skills use web_fetch / curl
+                         |
+                  FastAPI Backend           <-- this repo, deployed on Render/etc.
+                  |       |       |
+              /data/*  /ledger/*  /settle
+              (CoinGecko) (SQLite)  (Solana devnet)
 ```
+
+**Key separation:**
+- **FastAPI** = pure HTTP tool backend. No Telegram, no LLM calls.
+- **OpenClaw** = owns all agent logic, Telegram integration, and LLM (via OpenRouter). Runs as a separate process.
 
 ### Credit Flow
 
-1. User tells **Green**: "start" → Green creates account, issues 50 starter credits.
-2. User tells **Red**: "btc price" → Red fetches price from `/data/price`, returns it free.
-3. User tells **Yellow**: "analyze btc" → Yellow:
-   - Fetches price from `/data/price`.
+1. User tells **Green**: "start" -> Green calls `/ledger/issue_credit` -> user gets 50 credits.
+2. User tells **Red**: "btc price" -> Red calls `/data/price?symbol=btc` -> returns price.
+3. User tells **Yellow**: "analyze btc" -> Yellow:
+   - Calls `/data/price?symbol=btc` to get data.
    - Delivers structured analysis.
-   - Charges user 2 credits → `POST /ledger/transfer` (user → Yellow).
-   - Pays Red 1 credit for data → `POST /ledger/transfer` (Yellow → Red).
-4. User tells **Green**: "balance" → Green shows current balance.
-5. User tells **Green**: "agents" → Green shows all agent stats.
+   - Calls `/ledger/transfer` to charge user 2 credits.
+   - Calls `/ledger/transfer` to pay Red 1 credit for data.
+4. User tells **Green**: "balance" -> Green calls `/ledger/balance` -> shows balance.
+5. User tells **Green**: "agents" -> Green calls `/ledger/agent_stats` -> shows all stats.
 
 ---
 
@@ -84,30 +77,50 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edit .env with your actual values:
-#   OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN_RED/YELLOW/GREEN, etc.
+# Edit .env with your actual values
 ```
 
-### 3. Start the Ledger API
+### 3. Start the FastAPI backend
 
 ```bash
-python -m app.main
-# Or:
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 The API auto-creates the SQLite database and seeds agent accounts on first start.
 
-Verify it's running:
-```bash
-curl http://localhost:8000/health
-# {"status":"ok"}
+### 4. Verify the backend works
 
+```bash
+# Health check
+curl http://localhost:8000/health
+# -> {"status":"ok"}
+
+# Price endpoint
 curl "http://localhost:8000/data/price?symbol=btc"
-# {"symbol":"BTC","price_usd":97432.10,"timestamp":"..."}
+# -> {"symbol":"BTC","price_usd":65634.0,"timestamp":"2026-02-06T..."}
+
+# Issue starter credits
+curl -X POST http://localhost:8000/ledger/issue_credit \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "test123", "amount": 50}'
+# -> {"ok":true,"message":"Transfer complete.","tx_id":1}
+
+# Check balance
+curl "http://localhost:8000/ledger/balance?user_id=test123"
+# -> {"id":"test123","balance":50,"credit_limit":10,"reputation":500}
+
+# Transfer credits
+curl -X POST http://localhost:8000/ledger/transfer \
+  -H "Content-Type: application/json" \
+  -d '{"from_id":"test123","to_id":"lobster_yellow","amount":2,"memo":"test"}'
+# -> {"ok":true,"message":"Transfer complete.","tx_id":2}
+
+# Agent stats
+curl http://localhost:8000/ledger/agent_stats
+# -> [{"id":"lobster_red","balance":100,...}, ...]
 ```
 
-### 4. Install and configure OpenClaw
+### 5. Install and configure OpenClaw
 
 ```bash
 npm install -g openclaw
@@ -116,19 +129,19 @@ openclaw setup
 
 During setup, select **OpenRouter** as the model provider and enter your API key.
 
-Then copy/symlink the config and workspace files:
+Then copy the config and skill/soul files:
 
 ```bash
-# Copy the config (or merge into your existing ~/.openclaw/openclaw.json)
+# Copy the config
 cp openclaw/openclaw.config.json ~/.openclaw/openclaw.json
 
 # Create workspace directories for each agent
 mkdir -p ~/.openclaw/workspaces/{red,yellow,green}/skills
 
 # Copy skills into each agent's workspace
-cp -r openclaw/skills/lobster-red   ~/.openclaw/workspaces/red/skills/
-cp -r openclaw/skills/lobster-yellow ~/.openclaw/workspaces/yellow/skills/
-cp -r openclaw/skills/lobster-green  ~/.openclaw/workspaces/green/skills/
+cp openclaw/skills/lobster_red_skills.md    ~/.openclaw/workspaces/red/skills/SKILL.md
+cp openclaw/skills/lobster_yellow_skills.md ~/.openclaw/workspaces/yellow/skills/SKILL.md
+cp openclaw/skills/lobster_green_skills.md  ~/.openclaw/workspaces/green/skills/SKILL.md
 
 # Copy soul files into agent directories
 mkdir -p ~/.openclaw/agents/{lobster_red,lobster_yellow,lobster_green}
@@ -137,26 +150,25 @@ cp openclaw/souls/lobster_yellow_soul.md ~/.openclaw/agents/lobster_yellow/SOUL.
 cp openclaw/souls/lobster_green_soul.md  ~/.openclaw/agents/lobster_green/SOUL.md
 ```
 
-**Important:** Edit `~/.openclaw/openclaw.json` and replace the `${...}` placeholders with your actual bot tokens (or export them as environment variables before starting OpenClaw).
+Edit `~/.openclaw/openclaw.json` and replace `${...}` placeholders with your actual values, or export them as environment variables.
 
-### 5. Start OpenClaw
+### 6. Start OpenClaw
 
 ```bash
-# Export tokens if not hardcoded in config:
-export TELEGRAM_BOT_TOKEN_RED="your-red-token"
-export TELEGRAM_BOT_TOKEN_YELLOW="your-yellow-token"
-export TELEGRAM_BOT_TOKEN_GREEN="your-green-token"
-export OPENROUTER_API_KEY="your-openrouter-key"
-export LEDGER_API_BASE="http://localhost:8000"
+export TELEGRAM_BOT_TOKEN_RED="7986130620:AAE..."
+export TELEGRAM_BOT_TOKEN_YELLOW="7691960881:AAH..."
+export TELEGRAM_BOT_TOKEN_GREEN="8280137496:AAE..."
+export OPENROUTER_API_KEY="sk-or-v1-..."
+export BACKEND_URL="http://localhost:8000"  # or your Render URL
 
-openclaw start
+openclaw start --config ./openclaw/openclaw.config.json
 ```
 
-### 6. Set up Telegram
+### 7. Set up Telegram
 
-1. Create a Telegram group (e.g. "Lobster Economy Test").
+1. Create a Telegram group (e.g. "Lobster Economy").
 2. Add all three bots to the group.
-3. Make each bot an admin (so they can read messages).
+3. Make each bot an admin (so they can read group messages).
 4. Start chatting!
 
 ---
@@ -179,118 +191,135 @@ In the group, address each agent by name:
 
 ## API Reference
 
+All endpoints are on the FastAPI backend. OpenClaw agents call these via HTTP.
+
 ### Data
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/data/price?symbol=btc` | Fetch BTC or ETH price |
+| Method | Path | Description | Example |
+|--------|------|-------------|---------|
+| GET | `/data/price?symbol=btc` | BTC or ETH price | `{"symbol":"BTC","price_usd":97432.10,"timestamp":"..."}` |
 
 ### Ledger
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/ledger/account` | Create a new account |
-| GET | `/ledger/balance?user_id=...` | Get account balance |
-| POST | `/ledger/transfer` | Transfer credits between accounts |
-| POST | `/ledger/issue_credit` | Issue credits from Green's reserves |
-| GET | `/ledger/agent_stats` | Get stats for all three agents |
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| POST | `/ledger/account` | `{"id":"...","initial_balance":0,"credit_limit":10,"reputation":500}` | Create account |
+| GET | `/ledger/balance?user_id=...` | - | Get balance |
+| POST | `/ledger/transfer` | `{"from_id":"...","to_id":"...","amount":2,"memo":"..."}` | Transfer credits |
+| POST | `/ledger/issue_credit` | `{"user_id":"...","amount":50}` | Issue credits from Green |
+| GET | `/ledger/agent_stats` | - | Stats for all 3 agents |
 
 ### System
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
+| Method | Path | Description |
+|--------|------|-------------|
 | GET | `/health` | Health check |
-| POST | `/settle` | Trigger Solana devnet settlement |
+| POST | `/settle` | Solana devnet settlement demo |
+
+---
+
+## Environment Variables
+
+### FastAPI backend (set in `.env` or cloud dashboard)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `LEDGER_DB_PATH` | No | `./ledger.db` | Path to SQLite database |
+| `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC endpoint |
+| `SOLANA_SETTLEMENT_PRIVATE_KEY` | No | - | Keypair for /settle |
+| `PORT` | No | `8000` | Server port |
+
+### OpenClaw (export before running `openclaw start`)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
+| `OPENROUTER_MODEL` | No | LLM model (default: `meta-llama/llama-3.1-8b-instruct:free`) |
+| `TELEGRAM_BOT_TOKEN_RED` | Yes | Telegram token for Red bot |
+| `TELEGRAM_BOT_TOKEN_YELLOW` | Yes | Telegram token for Yellow bot |
+| `TELEGRAM_BOT_TOKEN_GREEN` | Yes | Telegram token for Green bot |
+| `BACKEND_URL` | Yes | URL of FastAPI backend (e.g. `http://localhost:8000`) |
 
 ---
 
 ## Solana Settlement Demo
 
-The `/settle` endpoint sends a real transaction on Solana devnet to demonstrate that off-chain credit balances can be bridged to an on-chain ledger.
+The `/settle` endpoint sends a real transaction on Solana devnet as proof that off-chain balances can be bridged on-chain.
 
 ### Setup
 
-1. Install the Solana CLI: https://docs.solanalabs.com/cli/install
-
+1. Install Solana CLI: https://docs.solanalabs.com/cli/install
 2. Generate a devnet keypair:
    ```bash
    solana-keygen new --outfile ~/.config/solana/devnet-treasury.json
    solana config set --url devnet
    ```
-
-3. Fund it with devnet SOL:
+3. Fund it:
    ```bash
    solana airdrop 2 --keypair ~/.config/solana/devnet-treasury.json
    ```
-
-4. Add the private key to `.env`:
-   ```bash
-   # Copy the JSON array from the keypair file:
-   SOLANA_SETTLEMENT_PRIVATE_KEY=[1,2,3,...,64 bytes]
+4. Set in `.env`:
+   ```
+   SOLANA_SETTLEMENT_PRIVATE_KEY=[1,2,3,...,64 bytes from keypair file]
    ```
 
-### Trigger Settlement
+### Trigger
 
 ```bash
 curl -X POST http://localhost:8000/settle
 ```
 
-Response:
-```json
-{
-  "ok": true,
-  "message": "Settlement proof sent. Memo: lobster_red: balance=103 | ...",
-  "tx_signature": "5Uj3...",
-  "explorer_url": "https://explorer.solana.com/tx/5Uj3...?cluster=devnet"
-}
-```
-
-Open the `explorer_url` in a browser to see the transaction on Solana Explorer.
+Returns a transaction signature and Solana Explorer link.
 
 ---
 
 ## Docker
-
-### Build and run
 
 ```bash
 docker build -t lobster-credit-playground .
 docker run -p 8000:8000 --env-file .env lobster-credit-playground
 ```
 
-### Or use docker-compose
+This runs only the FastAPI backend. OpenClaw runs separately.
 
-```bash
-docker compose up --build
+---
+
+## Project Structure
+
+```
+lobster-credit-playground/
+  README.md
+  Dockerfile
+  requirements.txt
+  .env.example
+
+  app/
+    main.py              # FastAPI entrypoint
+    config.py            # env vars (only what FastAPI needs)
+    db.py                # SQLite schema + seeding
+    ledger.py            # credit ledger logic
+    models.py            # Pydantic models
+    routers/
+      ledger_routes.py   # /ledger/* endpoints
+      data_routes.py     # /data/* endpoints
+      system_routes.py   # /health, /settle
+    services/
+      price_provider.py  # CoinGecko wrapper
+      solana_settlement.py
+
+  openclaw/
+    openclaw.config.json # 3-agent config for OpenClaw
+    souls/
+      lobster_red_soul.md
+      lobster_yellow_soul.md
+      lobster_green_soul.md
+    skills/
+      lobster_red_skills.md
+      lobster_yellow_skills.md
+      lobster_green_skills.md
 ```
 
-This starts only the Ledger API. OpenClaw still needs to run separately (it manages the Telegram bots and LLM connections).
-
----
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENROUTER_API_KEY` | Yes | — | OpenRouter API key |
-| `OPENROUTER_MODEL` | No | `meta-llama/llama-3.1-8b-instruct:free` | LLM model to use |
-| `TELEGRAM_BOT_TOKEN_RED` | Yes | — | Telegram token for Lobster Red |
-| `TELEGRAM_BOT_TOKEN_YELLOW` | Yes | — | Telegram token for Lobster Yellow |
-| `TELEGRAM_BOT_TOKEN_GREEN` | Yes | — | Telegram token for Lobster Green |
-| `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC endpoint |
-| `SOLANA_SETTLEMENT_PRIVATE_KEY` | No | — | Base58 or JSON keypair for settlement |
-| `LEDGER_DB_PATH` | No | `./ledger.db` | Path to SQLite database file |
-| `LEDGER_API_BASE` | No | `http://localhost:8000` | Base URL skills use to reach the API |
-
----
-
-## Design Decisions
-
-- **SQLite** instead of Postgres: simplest possible thing for a demo. The schema is compatible with Postgres if you want to swap later.
-- **CoinGecko free API**: no key needed, rate-limited but fine for a demo.
-- **OpenClaw skills** use `web_fetch` (built-in tool) to call the HTTP service. This avoids needing custom JavaScript tooling.
-- **Settlement** sends a self-transfer of 5000 lamports on devnet. It's a proof-of-concept, not real accounting. The transaction exists on-chain and can be verified.
-- **Credit flow** is intentionally simple: Green is the bank with 10,000 reserves, Yellow charges 2 and pays Red 1. No interest, no complex accounting.
+No Telegram bot code in FastAPI. No LLM calls in FastAPI. OpenClaw handles all of that.
 
 ---
 
